@@ -50,117 +50,127 @@ int main (int argc, char *argv[]) {
 
   DEBUG << "Target IP: " << destIP << ENDL;
 
-  int ttl = 255;
+  int ttl = 2;
   int sequence = 0;
 
-  // for (int currentHop = 0; currentHop < MAX_HOPS; currentHop++) {
-  //
-  // }
+  for (; ttl < MAX_HOPS; ttl++) {
+    // Socket Setup
+    int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+    int readsock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 
-  // Socket Setup
-  int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-  int readsock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-
-  if (sock == -1) {
-    ERROR << "Socket failed to initialize" << ENDL;
-    exit(1);
-  }
-
-  if (setsockopt(sock, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl) != 0)) {
-    ERROR << "Failed to set socket TTL" << ENDL;
-  }
-
-  DEBUG << "Setup Socket" << ENDL;
-
-  struct packet datagram{};
-  struct sockaddr_in addr = {
-    AF_INET,
-    0,
-    0
-  };
-
-  if (inet_pton (AF_INET, destIP.c_str(), &(addr.sin_addr)) < 0) {
-    FATAL << "Failed to set IP (Is it formatted correctly?)" << ENDL;
-    exit (EXIT_FAILURE);
-  }
-
-  memset(&datagram, 0, sizeof(datagram));
-
-  datagram.header.type = ICMP_ECHO;
-  datagram.header.un.echo.id = htons(getpid());
-  datagram.header.un.echo.sequence = htons(sequence++);
-
-  for (int i = 0; i < sizeof(datagram.data); i++) {
-    datagram.data[i] = '0' + i;
-  }
-
-  // DEBUG << checksum(&datagram, sizeof(datagram)) << '\n' << checksum((unsigned short*)&datagram, sizeof(datagram)) << ENDL;
-
-  datagram.header.checksum = checksum((unsigned short*)&datagram, sizeof(datagram));
-
-  DEBUG << "Built packet" << ENDL;
-
-  const auto s = sendto(sock, &datagram, sizeof(datagram), 0, (struct sockaddr*)&addr, sizeof(addr));
-
-  if (s == -1) {
-    ERROR << "Failed to send packet" << ENDL;
-    close(sock);
-    exit(1);
-  }
-  DEBUG << "Sent Packet: " << s << ENDL;
-
-
-  char recvBuf[64] = {};
-
-  struct sockaddr_in response_addr = {
-    AF_INET,
-    0,
-    0
-  };
-
-  bool ready = false;
-  int selectReturned = 0;
-  fd_set readFDSet;
-  struct timeval timeout;
-
-  while (!ready) {
-    timeout.tv_sec = 5;
-    timeout.tv_usec = 0;
-
-    FD_ZERO(&readFDSet);
-    FD_SET(readsock, &readFDSet);
-
-    DEBUG << "Wait up to 5 Seconds" << ENDL;
-    if ((selectReturned = select(readsock + 1, &readFDSet, NULL, NULL, &timeout)) < 0) {
-      FATAL << "Select Failed" << ENDL;
-      close(readsock);
-      close(sock);
+    if (sock == -1) {
+      ERROR << "Socket failed to initialize" << ENDL;
       exit(1);
     }
 
-    DEBUG << "Select Returned: " << selectReturned << ENDL;
-
-    if (FD_ISSET(readsock, &readFDSet)) {
-      DEBUG << "Bit #" << readsock << " is set" << ENDL;
-      ready = true;
-
+    if (setsockopt(sock, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl) != 0)) {
+      ERROR << "Failed to set socket TTL" << ENDL;
     }
+
+    DEBUG << "Setup Socket" << ENDL;
+
+    struct packet datagram{};
+    struct sockaddr_in addr = {
+      AF_INET,
+      0,
+      0
+    };
+
+    if (inet_pton (AF_INET, destIP.c_str(), &(addr.sin_addr)) < 0) {
+      FATAL << "Failed to set IP (Is it formatted correctly?)" << ENDL;
+      exit (EXIT_FAILURE);
+    }
+
+    memset(&datagram, 0, sizeof(datagram));
+
+    datagram.header.type = ICMP_ECHO;
+    datagram.header.un.echo.id = htons(getpid());
+    datagram.header.un.echo.sequence = htons(sequence++);
+
+    for (int i = 0; i < sizeof(datagram.data); i++) {
+      datagram.data[i] = '0' + i;
+    }
+
+    // DEBUG << checksum(&datagram, sizeof(datagram)) << '\n' << checksum((unsigned short*)&datagram, sizeof(datagram)) << ENDL;
+
+    datagram.header.checksum = checksum((unsigned short*)&datagram, sizeof(datagram));
+
+    DEBUG << "Built packet" << ENDL;
+
+    const auto s = sendto(sock, &datagram, sizeof(datagram), 0, (struct sockaddr*)&addr, sizeof(addr));
+
+    if (s == -1) {
+      ERROR << "Failed to send packet" << ENDL;
+      close(sock);
+      exit(1);
+    }
+    DEBUG << "Sent Packet: " << s << ENDL;
+
+
+    char recvBuf[64] = {};
+
+    struct sockaddr_in response_addr = {
+      AF_INET,
+      0,
+      0
+    };
+
+    bool ready = false;
+    bool timedout = false;
+    int count = 0;
+    int selectReturned = 0;
+    fd_set readFDSet;
+    struct timeval timeout;
+
+    while (!ready) {
+      timeout.tv_sec = 1;
+      timeout.tv_usec = 0;
+
+      FD_ZERO(&readFDSet);
+      FD_SET(readsock, &readFDSet);
+
+      DEBUG << "Wait up to 5 Seconds" << ENDL;
+      if ((selectReturned = select(readsock + 1, &readFDSet, NULL, NULL, &timeout)) < 0) {
+        FATAL << "Select Failed" << ENDL;
+        close(readsock);
+        close(sock);
+        exit(1);
+      }
+
+      DEBUG << "Select Returned: " << selectReturned << " round: " << count << "/15" << ENDL;
+
+      if (FD_ISSET(readsock, &readFDSet)) {
+        DEBUG << "Bit #" << readsock << " is set" << ENDL;
+        ready = true;
+      }
+
+      if (count >= 2) {
+        DEBUG << "Timeout" << ENDL;
+        timedout = true;
+        break;
+      }
+
+      count++;
+    }
+
+    char response_ip[32] = {};
+    if (!timedout) {
+      socklen_t response_addr_len = sizeof(response_addr);
+
+      int r = recvfrom(readsock, recvBuf, 64, 0, (struct sockaddr*)&response_addr, &response_addr_len);
+
+      if (r == -1) {
+        ERROR << "Read failed" << ENDL;
+      }
+
+
+      inet_ntop(AF_INET, &response_addr.sin_addr, response_ip, INET_ADDRSTRLEN);
+      DEBUG << "Read from Socket: " << response_ip << ENDL;
+    }
+
+    std::cout << ttl << " - " << (timedout ? "Timeout" : response_ip) << std::endl;
+
+    close(readsock);
+    close(sock);
   }
-
-  socklen_t response_addr_len = sizeof(response_addr);
-
-  int r = recvfrom(readsock, recvBuf, 64, 0, (struct sockaddr*)&response_addr, &response_addr_len);
-
-  if (r == -1) {
-    ERROR << "Read failed" << ENDL;
-  }
-
-  char response_ip[32] = {};
-  inet_ntop(AF_INET, &response_addr.sin_addr, response_ip, INET_ADDRSTRLEN);
-  DEBUG << "Read from Socket: " << response_ip << ENDL;
-
-  close(readsock);
-  close(sock);
-
-
 }
