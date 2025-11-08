@@ -6,7 +6,7 @@
 #  Copyright 2012 Colorado School of Mines. All rights reserved.
 #
 
-USERNAME = change-me
+USERNAME = nmoore1
 
 CXX = g++
 LD = g++
@@ -25,11 +25,15 @@ INC_FILES = ${TARGET}.h
 #
 #LIBRARYS = -lbsd -lboost_regex -lboost_log_setup -lboost_log -lboost_thread -lboost_system -lpthread -lboost_filesystem
 
+all: ${TARGET}
+
 ${TARGET}: ${OBJ_FILES}
 	${LD} ${LDFLAGS} ${OBJ_FILES} -o $@ ${LIBRARYS}
 
 %.o : %.cpp ${INC_FILES}
 	${CXX} -c ${CXXFLAGS} -o $@ $<
+
+
 
 #
 # Please remember not to submit objects or binarys.
