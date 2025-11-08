@@ -59,6 +59,7 @@ int main (int argc, char *argv[]) {
 
   // Socket Setup
   int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+  int readsock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 
   if (sock == -1) {
     ERROR << "Socket failed to initialize" << ENDL;
@@ -108,18 +109,57 @@ int main (int argc, char *argv[]) {
   }
   DEBUG << "Sent Packet: " << s << ENDL;
 
-  // int readsock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-  //
-  // char* recvBuf = (char*)malloc(256);
-  //
-  // while (
-  //   recvfrom(readsock, recvBuf, 256, 0, (struct sockaddr*)&dest_addr, (socklen_t *)sizeof(dest_addr)) <= 0
-  // ) {
-  //
-  // }
-  //
-  // DEBUG << dest_addr.sin_addr.s_addr << ENDL;
-  // close(readsock);
+
+  char recvBuf[64] = {};
+
+  struct sockaddr_in response_addr = {
+    AF_INET,
+    0,
+    0
+  };
+
+  bool ready = false;
+  int selectReturned = 0;
+  fd_set readFDSet;
+  struct timeval timeout;
+
+  while (!ready) {
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+
+    FD_ZERO(&readFDSet);
+    FD_SET(readsock, &readFDSet);
+
+    DEBUG << "Wait up to 5 Seconds" << ENDL;
+    if ((selectReturned = select(readsock + 1, &readFDSet, NULL, NULL, &timeout)) < 0) {
+      FATAL << "Select Failed" << ENDL;
+      close(readsock);
+      close(sock);
+      exit(1);
+    }
+
+    DEBUG << "Select Returned: " << selectReturned << ENDL;
+
+    if (FD_ISSET(readsock, &readFDSet)) {
+      DEBUG << "Bit #" << readsock << " is set" << ENDL;
+      ready = true;
+
+    }
+  }
+
+  socklen_t response_addr_len = sizeof(response_addr);
+
+  int r = recvfrom(readsock, recvBuf, 64, 0, (struct sockaddr*)&response_addr, &response_addr_len);
+
+  if (r == -1) {
+    ERROR << "Read failed" << ENDL;
+  }
+
+  char response_ip[32] = {};
+  inet_ntop(AF_INET, &response_addr.sin_addr, response_ip, INET_ADDRSTRLEN);
+  DEBUG << "Read from Socket: " << response_ip << ENDL;
+
+  close(readsock);
   close(sock);
 
 
