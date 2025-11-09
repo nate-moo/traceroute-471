@@ -1,4 +1,6 @@
 #include "traceroute.h"
+
+#include <iomanip>
 #define MAX_HOPS 30
 
 // ****************************************************************************
@@ -106,9 +108,6 @@ int main (int argc, char *argv[]) {
     }
     DEBUG << "Sent Packet: " << s << ENDL;
 
-
-    char recvBuf[64] = {};
-
     struct sockaddr_in response_addr = {
       AF_INET,
       0,
@@ -144,7 +143,7 @@ int main (int argc, char *argv[]) {
         ready = true;
       }
 
-      if (count >= 2) {
+      if (count >= 15) {
         DEBUG << "Timeout" << ENDL;
         timedout = true;
         break;
@@ -154,21 +153,57 @@ int main (int argc, char *argv[]) {
     }
 
     char response_ip[32] = {};
+    uint8_t type = 254;
     if (!timedout) {
       socklen_t response_addr_len = sizeof(response_addr);
 
-      int r = recvfrom(readsock, recvBuf, 64, 0, (struct sockaddr*)&response_addr, &response_addr_len);
+
+      char recvPacket[512] = {};
+      struct packet recvdatagram{};
+
+      auto r = recvfrom(readsock, recvPacket, 512, 0, (struct sockaddr*)&response_addr, &response_addr_len);
 
       if (r == -1) {
         ERROR << "Read failed" << ENDL;
       }
 
+      struct iphdr *ip_hdr = (struct iphdr *)recvPacket;
+      int ip_header_len = ip_hdr->ihl * 4;
+      struct icmphdr *icmp_hdr = (struct icmphdr *)(recvPacket + ip_header_len);
+      type = icmp_hdr->type;
 
       inet_ntop(AF_INET, &response_addr.sin_addr, response_ip, INET_ADDRSTRLEN);
       DEBUG << "Read from Socket: " << response_ip << ENDL;
+      if (type == ICMP_ECHOREPLY) {
+        INFO << "type: Echo Reply" << ENDL;
+      } else if (type == ICMP_TIME_EXCEEDED) {
+        INFO << "type: TTL Exceeded" << ENDL;
+      } else {
+        INFO << "type: " << type << ENDL;
+      }
+
     }
 
-    std::cout << ttl << " - " << (timedout ? "Timeout" : response_ip) << std::endl;
+    std::cout << std::setw(3) << ttl << " - " << std::setw(15) << (timedout ? "Timeout" : response_ip) << " - ";
+    if (type == ICMP_ECHOREPLY) {
+      std::cout << "type: Echo Reply" << std::endl;
+    } else if (type == ICMP_TIME_EXCEEDED) {
+      std::cout << "type: TTL Exceeded" << std::endl;
+    } else {
+      std::cout << "type: " << type << std::endl;
+    }
+
+    if (strcmp(response_ip, destIP.c_str()) == 0) {
+      DEBUG << "Dumb string matching" << ENDL;
+      std::cout << "Target Responded!" << std::endl;
+      break;
+    }
+
+    if (type == 0) {
+      DEBUG << "Match by type" << ENDL;
+      std::cout << "Target Responded!" << std::endl;
+      break;
+    }
 
     close(readsock);
     close(sock);
