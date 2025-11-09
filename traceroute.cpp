@@ -60,8 +60,9 @@ int main (int argc, char *argv[]) {
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     int readsock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 
-    if (sock == -1) {
-      ERROR << "Socket failed to initialize" << ENDL;
+    if (sock == -1 || readsock == -1) {
+      perror("Failed to initialize sockets, are you root?");
+      // ERROR << "Socket failed to initialize" << ENDL;
       exit(1);
     }
 
@@ -108,7 +109,7 @@ int main (int argc, char *argv[]) {
     }
     DEBUG << "Sent Packet: " << s << ENDL;
 
-    struct sockaddr_in response_addr = {
+    sockaddr_in response_addr = {
       AF_INET,
       0,
       0
@@ -119,7 +120,7 @@ int main (int argc, char *argv[]) {
     int count = 0;
     int selectReturned = 0;
     fd_set readFDSet;
-    struct timeval timeout;
+    struct timeval timeout{};
 
     while (!ready) {
       timeout.tv_sec = 1;
@@ -157,9 +158,7 @@ int main (int argc, char *argv[]) {
     if (!timedout) {
       socklen_t response_addr_len = sizeof(response_addr);
 
-
       char recvPacket[512] = {};
-      struct packet recvdatagram{};
 
       auto r = recvfrom(readsock, recvPacket, 512, 0, (struct sockaddr*)&response_addr, &response_addr_len);
 
@@ -175,22 +174,24 @@ int main (int argc, char *argv[]) {
       inet_ntop(AF_INET, &response_addr.sin_addr, response_ip, INET_ADDRSTRLEN);
       DEBUG << "Read from Socket: " << response_ip << ENDL;
       if (type == ICMP_ECHOREPLY) {
-        INFO << "type: Echo Reply" << ENDL;
+        INFO << "Echo Reply" << ENDL;
       } else if (type == ICMP_TIME_EXCEEDED) {
-        INFO << "type: TTL Exceeded" << ENDL;
-      } else {
-        INFO << "type: " << type << ENDL;
+        INFO << "TTL Exceeded" << ENDL;
+      } else if (!timedout) {
+        INFO << type << ENDL;
       }
 
     }
 
     std::cout << std::setw(3) << ttl << " - " << std::setw(15) << (timedout ? "Timeout" : response_ip) << " - ";
     if (type == ICMP_ECHOREPLY) {
-      std::cout << "type: Echo Reply" << std::endl;
+      std::cout << "Echo Reply" << std::endl;
     } else if (type == ICMP_TIME_EXCEEDED) {
-      std::cout << "type: TTL Exceeded" << std::endl;
+      std::cout << "TTL Exceeded" << std::endl;
+    } else if (!timedout) {
+      std::cout << type << std::endl;
     } else {
-      std::cout << "type: " << type << std::endl;
+      std::cout << std::endl;
     }
 
     if (strcmp(response_ip, destIP.c_str()) == 0) {
